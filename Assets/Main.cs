@@ -14,6 +14,10 @@ public class Main : MonoBehaviour
 {
     public Text response;
 
+    public InputField maskID;
+
+    public InputField animationID;
+
     public Dropdown dropdown;
 
     public Dropdown mutedDropdown;
@@ -33,8 +37,12 @@ public class Main : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        // Muted Setup
+        // dropdown Setup
         trueFalseDropdownSetup(mutedDropdown);
+        trueFalseDropdownSetup(deafDropdown);
+        trueFalseDropdownSetup(blindDropdown);
+        trueFalseDropdownSetup(mvDropdown);
+        trueFalseDropdownSetup(wvDropdown);
 
         // Dropdown setup
         dropdown.ClearOptions();
@@ -45,6 +53,9 @@ public class Main : MonoBehaviour
     }
 
     private void trueFalseDropdownSetup(Dropdown d) {
+        if (d == null) {
+            return;
+        }
         d.ClearOptions();
         Dropdown.OptionData data = new Dropdown.OptionData();
         data.text = "true";
@@ -64,7 +75,6 @@ public class Main : MonoBehaviour
         var resp = await client.SendAsync(request);
         var text = await resp.Content.ReadAsStringAsync();
         List<PlayerIndex> t = JsonConvert.DeserializeObject<List<PlayerIndex>>(text);
-        // PlayerIndex[] t = JsonHelper.FromJson<PlayerIndex>(text);
         var message = request.RequestUri + "\n";
         foreach (PlayerIndex p in t) {
             foreach (int idx in p.PlayerIdx) {
@@ -100,10 +110,36 @@ public class Main : MonoBehaviour
         doBoolRequest("webcam-visible", wvDropdown);
     }
 
+    public async void MaskID() {
+        doStringRequest("mask", maskID);
+    }
+
+    public async void AnimationID() {
+        doStringRequest("mask-animation", animationID);
+    }
+
     public async void doBoolRequest(string action, Dropdown boolD) {
         // 1) Get params
         bool value = Boolean.Parse(boolD.options[boolD.value].text);
-        string usid = dropdown.options[dropdown.value].text;
+        string usid = dropdown.options[dropdown.value].text.Split(' ')[0];
+
+        // 2) Formulate the request
+        string uri = String.Format("https://{0}/api/v1/{1}?usid={2}&value={3}",
+                connectionHost,
+                action,
+                usid,
+                value
+        );
+        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, uri);
+        var resp = await client.SendAsync(request);
+        // 3) populate response
+        response.text = uri + "\n" + resp.StatusCode.ToString();
+    }
+
+    public async void doStringRequest(string action, InputField f) {
+        // 1) Get params
+        string value = f.text;
+        string usid = dropdown.options[dropdown.value].text.Split(' ')[0];
 
         // 2) Formulate the request
         string uri = String.Format("https://{0}/api/v1/{1}?usid={2}&value={3}",
