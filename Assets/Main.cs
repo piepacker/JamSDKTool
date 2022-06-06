@@ -5,9 +5,8 @@ using System.IO;
 using System.Net;
 using UnityEngine.UI;
 using PiepackerSDK;
-using System.Net.Http;
+using UnityEngine.Networking;
 using System.Text;
-using Newtonsoft.Json;
 using System;
 
 public class Main : MonoBehaviour
@@ -30,32 +29,37 @@ public class Main : MonoBehaviour
 
     public Dropdown wvDropdown;
 
-    private static readonly HttpClient client = new HttpClient();
-
-    private static readonly string connectionHost = "bandicoot-kvfl9-t5cmk.api.piepackerstaging.com";
+    // this variable is only used for testing using the Unity studio. For actual use, keep this commented
+    // and the value of connectionHost to empty string. The value here is that of an active bandicoot url.
+    // private static readonly string connectionHost = "bandicoot-kvfl9-tm7nv.api.piepackerstaging.com";
+    private static readonly string connectionHost = "";
 
     // Start is called before the first frame update
     void Start()
     {
         // dropdown Setup
-        trueFalseDropdownSetup(mutedDropdown);
-        trueFalseDropdownSetup(deafDropdown);
-        trueFalseDropdownSetup(blindDropdown);
-        trueFalseDropdownSetup(mvDropdown);
-        trueFalseDropdownSetup(wvDropdown);
+        trueFalseDropdownSetup("muted", mutedDropdown);
+        trueFalseDropdownSetup("deaf", deafDropdown);
+        trueFalseDropdownSetup("blind", blindDropdown);
+        trueFalseDropdownSetup("mv", mvDropdown);
+        trueFalseDropdownSetup("wv", wvDropdown);
 
         // Dropdown setup
-        dropdown.ClearOptions();
-        dropdown.onValueChanged.AddListener(delegate {
-            dropdown.RefreshShownValue();
-        });
         Refresh();
     }
 
-    private void trueFalseDropdownSetup(Dropdown d) {
+    private string connect() {
+        if (connectionHost == "") {
+            return Piepacker.ConnectionHost();
+        }
+        return connectionHost;
+    }
+
+    private void trueFalseDropdownSetup(string label, Dropdown d) {
         if (d == null) {
             return;
         }
+        Debug.Log(label + " dropdown:" + d);
         d.ClearOptions();
         Dropdown.OptionData data = new Dropdown.OptionData();
         data.text = "true";
@@ -69,89 +73,113 @@ public class Main : MonoBehaviour
         });
     }
 
-    public async void Refresh () {
-        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, string.Format("https://{0}/api/v1/player-indexes", connectionHost));
-        request.Content = new StringContent("", Encoding.UTF8, "application/json");
-        var resp = await client.SendAsync(request);
-        var text = await resp.Content.ReadAsStringAsync();
-        List<PlayerIndex> t = JsonConvert.DeserializeObject<List<PlayerIndex>>(text);
-        var message = request.RequestUri + "\n";
-        foreach (PlayerIndex p in t) {
-            foreach (int idx in p.PlayerIdx) {
-                string msg = string.Format("{0} ({1})", p.UserSessionID, string.Join(",", p.PlayerIdx));
-                message += msg + "\n";
-                Dropdown.OptionData data = new Dropdown.OptionData();
-                data.text = msg;
-                dropdown.options.Add(data);
-            }
+    public void Refresh () {
+        StartCoroutine(RefreshIt());
+    }
+
+    public IEnumerator RefreshIt () {
+        if (dropdown == null) {
+            yield break;
         }
-        dropdown.RefreshShownValue();
-        response.text = message;
+        string url = string.Format("https://{0}/api/v1/player-indexes", connect());
+        using (UnityWebRequest www = UnityWebRequest.Get(url)) {
+            yield return www.SendWebRequest();
+            if (www.result == UnityWebRequest.Result.ProtocolError) {
+                Debug.Log(www.error);
+                yield break;
+            }
+            var text = www.downloadHandler.text;
+            List<PlayerIndex> playerList = JsonHelper.FromJson<PlayerIndex>(JsonHelper.wrapJson(text));
+            var message = url + "\n";
+            Debug.Log("usid dropdown: " + dropdown);
+            dropdown.ClearOptions();
+            foreach (PlayerIndex p in playerList) {
+                foreach (int idx in p.PlayerIdx) {
+                    string msg = string.Format("{0} ({1})", p.UserSessionID, string.Join(",", p.PlayerIdx));
+                    message += msg + "\n";
+                    Dropdown.OptionData data = new Dropdown.OptionData();
+                    data.text = msg;
+                    dropdown.options.Add(data);
+                }
+            }
+            dropdown.RefreshShownValue();
+            response.text = message;
+        }
     }
 
     // called when clicked on the mute button
-    public async void Mute() {
-        doBoolRequest("muted", mutedDropdown);
+    public void Mute() {
+        StartCoroutine(doBoolRequest("muted", mutedDropdown));
     }
 
-    public async void Blind() {
-        doBoolRequest("blind", blindDropdown);
+    public void Blind() {
+        StartCoroutine(doBoolRequest("blind", blindDropdown));
     }
 
-    public async void Deaf() {
-        doBoolRequest("deaf", deafDropdown);
+    public void Deaf() {
+        StartCoroutine(doBoolRequest("deaf", deafDropdown));
     }
 
-    public async void MV() {
-        doBoolRequest("mask-visible", mvDropdown);
+    public void MV() {
+        StartCoroutine(doBoolRequest("mask-visible", mvDropdown));
     }
 
-    public async void WV() {
-        doBoolRequest("webcam-visible", wvDropdown);
+    public void WV() {
+        StartCoroutine(doBoolRequest("webcam-visible", wvDropdown));
     }
 
-    public async void MaskID() {
-        doStringRequest("mask", maskID);
+    public void MaskID() {
+        StartCoroutine(doStringRequest("mask", maskID));
     }
 
-    public async void AnimationID() {
-        doStringRequest("mask-animation", animationID);
+    public void AnimationID() {
+        StartCoroutine(doStringRequest("mask-animation", animationID));
     }
 
-    public async void doBoolRequest(string action, Dropdown boolD) {
+    public IEnumerator doBoolRequest(string action, Dropdown boolD) {
         // 1) Get params
         bool value = Boolean.Parse(boolD.options[boolD.value].text);
         string usid = dropdown.options[dropdown.value].text.Split(' ')[0];
 
         // 2) Formulate the request
-        string uri = String.Format("https://{0}/api/v1/{1}?usid={2}&value={3}",
-                connectionHost,
+        string url = String.Format("https://{0}/api/v1/{1}?usid={2}&value={3}",
+                connect(),
                 action,
                 usid,
                 value
         );
-        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, uri);
-        var resp = await client.SendAsync(request);
-        // 3) populate response
-        response.text = uri + "\n" + resp.StatusCode.ToString();
+        WWWForm form = new WWWForm();
+        using (UnityWebRequest www = UnityWebRequest.Post(url, form)) {
+            yield return www.SendWebRequest();
+            if (www.result == UnityWebRequest.Result.ProtocolError) {
+                Debug.Log(www.error);
+                yield break;
+            }
+            response.text = url + "\n" + www.downloadHandler.text;
+        }
     }
 
-    public async void doStringRequest(string action, InputField f) {
+    public IEnumerator doStringRequest(string action, InputField f) {
         // 1) Get params
         string value = f.text;
         string usid = dropdown.options[dropdown.value].text.Split(' ')[0];
 
         // 2) Formulate the request
-        string uri = String.Format("https://{0}/api/v1/{1}?usid={2}&value={3}",
-                connectionHost,
+        string url = String.Format("https://{0}/api/v1/{1}?usid={2}&value={3}",
+                connect(),
                 action,
                 usid,
                 value
         );
-        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, uri);
-        var resp = await client.SendAsync(request);
-        // 3) populate response
-        response.text = uri + "\n" + resp.StatusCode.ToString();
+        WWWForm form = new WWWForm();
+        using (UnityWebRequest www = UnityWebRequest.Post(url, form)) {
+            yield return www.SendWebRequest();
+            if (www.result == UnityWebRequest.Result.ProtocolError) {
+                Debug.Log(www.error);
+                yield break;
+            }
+            response.text = url + "\n" + www.downloadHandler.text;
+        }
     }
 
     // Update is called once per frame
@@ -160,10 +188,39 @@ public class Main : MonoBehaviour
         
     }
 
-    
-
+    [System.Serializable]
     public class PlayerIndex {
-        public string UserSessionID { get; set; }
-        public List<int> PlayerIdx { get; set; }
+        public string UserSessionID;
+        public List<int> PlayerIdx;
+    }
+
+    public static class JsonHelper
+    {
+        public static string wrapJson(string value) {
+            value = "{\"Items\":" + value + "}";
+            return value;
+        }
+
+        public static List<T> FromJson<T>(string json) {
+            Wrapper<T> wrapper = JsonUtility.FromJson<Wrapper<T>>(json);
+            return wrapper.Items;
+        }
+
+        public static string ToJson<T>(List<T> array) {
+            Wrapper<T> wrapper = new Wrapper<T>();
+            wrapper.Items = array;
+            return JsonUtility.ToJson(wrapper);
+        }
+
+        public static string ToJson<T>(List<T> array, bool prettyPrint) {
+            Wrapper<T> wrapper = new Wrapper<T>();
+            wrapper.Items = array;
+            return JsonUtility.ToJson(wrapper, prettyPrint);
+        }
+
+        [System.Serializable]
+        private class Wrapper<T> {
+            public List<T> Items;
+        }
     }
 }

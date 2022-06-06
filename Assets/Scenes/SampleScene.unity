@@ -322,7 +322,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1741995205}
         m_TargetAssemblyTypeName: Main, Assembly-CSharp
-        m_MethodName: Mute
+        m_MethodName: AnimationID
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -6711,7 +6711,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 1741995205}
         m_TargetAssemblyTypeName: Main, Assembly-CSharp
-        m_MethodName: Mute
+        m_MethodName: MaskID
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
